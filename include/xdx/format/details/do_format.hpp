@@ -1,7 +1,7 @@
 #pragma once
 
-#include <xdx/format/details/forward.hpp>
 #include <xdx/format/details/types.hpp>
+#include <xdx/format/details/types.impl.hpp>
 
 namespace xdx::format::details
 {
@@ -40,52 +40,60 @@ struct Formater
         End
     };
 
-    static constexpr bool isany(C ch) {
-        return ch != IndexedGroupStart && ch != NamedGroupStart;
+    static bool isany(C ch) {
+        return ch != IndexedGroupStart && ch != NamedGroupStart && ch != Escape;
     }
 
-    static constexpr bool isdigit(C ch) {
+    static bool isdigit(C ch) {
         return '0' <= ch && ch <= '9';
     }
 
-    static std::pair<Range, RType> next_range(const SV& sv, size_t s) {
+    static std::pair<Range, RType> next_range(Stream& stream, const SV& sv, size_t s) {
         auto size = sv.size();
         auto start = s;
         auto end = s;
 
         for (; end < size && isany(sv[end]); ++end) {
+            stream.put(sv[end]);
         }
 
         if (end != start) {
-            return {{start, end + 1}, Any};
+            return {{start, end}, Any};
         }
 
         if (sv[end] == Escape) {
             if ((end + 1) == size) {
                 return {{start, end}, End};
             }
+            stream.put(sv[end + 1]);
             return {{end + 1, end + 2}, Any};
         }
 
         if (sv[end] == IndexedGroupStart) {
             if ((end + 1) == size || !isdigit(sv[end + 1])) {
-                return {{start, end + 1}, Any};
+                stream.put(sv[end]);
+                return {{end, end + 1}, Any};
             }
-            start = end + 1;
+            end += 1;
+            start = end;
             for (; end < size && isdigit(sv[end]); ++end) {
             }
-            return {{start, end + 1}, Index};
+            return {{start, end}, Index};
         }
 
         if (sv[end] == NamedGroupStart) {
             if ((end + 1) == size) {
-                return {{start, end + 1}, Any};
-            }
-            if (sv[end + 1] == NamedGroupStart) {
+                stream.put(sv[end]);
                 return {{end, end + 1}, Any};
             }
+            if (sv[end + 1] == NamedGroupStart) {
+                stream.put(sv[end]);
+                return {{end + 1, end + 2}, Any};
+            }
             if (sv[end + 1] == NamedGroupEnd) {
-                return {{start, end + 1}, Any};
+                stream.put(sv[end]);
+                stream.put(sv[end + 1]);
+                return {{end, end + 2}, Any};
             }
 
             start = end + 1;
@@ -113,12 +121,11 @@ struct Formater
         size_t start_index = 0;
 
         while (start_index < format_string.size()) {
-            auto [range, type] = next_range(format_string, start_index);
+            auto [range, type] = next_range(stream, format_string, start_index);
             switch (type) {
                 case End:
                     return;
                 case Any:
-                    stream << (format_string.substr(range.s, range.e - range.s));
                     break;
                 case Name:
                     nargs.print(stream, format_string.substr(range.s, range.e - range.s - 1));

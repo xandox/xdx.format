@@ -8,8 +8,9 @@ xdx_project(
     NAMESPACE xdx::format
     HEADERS
         details/types.hpp
-        details/forward.hpp
         details/do_format.hpp
+        details/forward.hpp
+        details/types.impl.hpp
         ../format.hpp
     TESTS
         format.tests.cpp
